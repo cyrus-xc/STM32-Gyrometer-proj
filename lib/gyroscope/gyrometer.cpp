@@ -1,4 +1,4 @@
-#include "gyro.h"
+#include "gyrometer.h"
 
 SPI spi(SPI_MOSI_PIN, SPI_MISO_PIN, SPI_SCK_PIN, GYRO_SPI_CS, use_gpio_ssel);
 
@@ -7,7 +7,11 @@ void GYRO_init() {
   spi.frequency(SPI_SPEED_1MHz); 
   GYRO_write_reg(I3G_CTRL_REG1, GYRO_CTRL_REG1_CONFIG);
   GYRO_write_reg(I3G_CTRL_REG4, GYRO_CTRL_REG4_CONFIG);
-
+  // set low threshold to Full scale 250 dps
+  GYRO_write_reg(I3G_INT1_THS_XL, 0x00);
+  GYRO_write_reg(I3G_INT1_THS_YL, 0x00);
+  GYRO_write_reg(I3G_INT1_THS_ZL, 0x00);
+  
 }
 
 uint8_t GYRO_read_reg(uint8_t reg) {
