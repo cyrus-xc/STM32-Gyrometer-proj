@@ -70,6 +70,11 @@ int main() {
   GYRO_init(); // threshold of 250dps is set on xyz axis
   t_out.attach(sample, 50ms);
   BSP_LCD_SetFont(&Font20);
+  lcd.Clear(LCD_COLOR_BLACK);
+  lcd.SetBackColor(LCD_COLOR_BLACK);
+  lcd.SetTextColor(LCD_COLOR_BLUE);
+  lcd.DisplayStringAt(0, LINE(4), (uint8_t *)"Total distance: ", CENTER_MODE);
+  lcd.DisplayStringAt(0, LINE(5), (uint8_t *)"0.0 m", CENTER_MODE);
   
   while (1){
     int16_t raw_gx, raw_gy, raw_gz;
@@ -98,14 +103,10 @@ int main() {
     // Display on LCD
     uint8_t message1[30];
     sprintf((char *)message1, "%0.2f m", ::totalDist);
-    lcd.Clear(LCD_COLOR_BLACK);
-    lcd.SetBackColor(LCD_COLOR_BLACK);
-    lcd.SetTextColor(LCD_COLOR_BLUE);
-    lcd.DisplayStringAt(0, LINE(4), (uint8_t *)"Total distance: ", CENTER_MODE);
     lcd.DisplayStringAt(0, LINE(5), (uint8_t *)&message1, CENTER_MODE);
-    if (::distance - 0.001 < 0){
-      lcd.DisplayStringAt(0, LINE(6), (uint8_t *)"Idling", CENTER_MODE);
-    }
+    // if (::distance - 0.001 < 0){
+    //   lcd.DisplayStringAt(0, LINE(6), (uint8_t *)"Idling", CENTER_MODE);
+    // }
     
     // Push Button1 on board (the blue one) to store data into flash
     count = (count + 1) % 512;
