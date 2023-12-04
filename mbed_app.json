@@ -2,6 +2,11 @@
     "target_overrides": {
         "*": {
             "target.printf_lib": "std"
+        },
+        "DISCO_F429ZI":{
+            "target.device_has_add": [
+                "USBDEVICE"
+            ]
         }
     }
 }

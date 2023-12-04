@@ -2,7 +2,7 @@
 
 NYU ECE-6483 Embeded System Challenge
 
-Group member: Chen XU(cx2214), ,
+Group member: Chen XU(cx2214), Shuning LI(sl10916),
 
 ### Gyro Data Collection
 
