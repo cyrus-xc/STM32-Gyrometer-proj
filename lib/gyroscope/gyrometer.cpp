@@ -11,7 +11,6 @@ void GYRO_init() {
   GYRO_write_reg(I3G_INT1_THS_XL, 0x00);
   GYRO_write_reg(I3G_INT1_THS_YL, 0x00);
   GYRO_write_reg(I3G_INT1_THS_ZL, 0x00);
-  
 }
 
 uint8_t GYRO_read_reg(uint8_t reg) {

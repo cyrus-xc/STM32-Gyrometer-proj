@@ -21,7 +21,7 @@ LCD_DISCO_F429ZI lcd;
 // Sector 15 is 16KB, hence 16 * 1024 for size
 FlashIAPBlockDevice bd(ADDR_FLASH_SEC15, 16 * 1024);
 // measure distance for one step given the data set and height of user (in meters)
-float measureDistanceOneStep(int16_t gyro_x, int16_t gyro_y, int16_t gyro_z, float heightOfUser);
+float measureDistanceOneStep(int16_t gyro_z, float heightOfUser);
 string float_to_String(float num);
 
 EventFlags flags;
@@ -34,6 +34,7 @@ volatile bool button_pressed = false;
 volatile bool check_buttonpressed = false;
 volatile float totalDist = 0.0;
 volatile float distance = 0.0;
+volatile int16_t peak = 0;
 
 void sample(){
   sample_ready=true;
@@ -87,17 +88,20 @@ int main() {
     raw_gx = GYRO_X();
     raw_gy = GYRO_Y();
     raw_gz = GYRO_Z();
+    peak = peak > abs(raw_gz)? peak : abs(raw_gz);
     XYZ_array[count] = raw_gx;
     XYZ_array[count + 512] = raw_gy;
     XYZ_array[count + 512 * 2] = raw_gz;
 
-    // printf(">x_axis: %d|g\n", raw_gx);
-    // printf(">y_axis: %d|g\n", raw_gy);
-    // printf(">z_axis: %d|g\n", raw_gz);
+    printf(">x_axis: %d|g\n", raw_gx);
+    printf(">y_axis: %d|g\n", raw_gy);
+    printf(">z_axis: %d|g\n", raw_gz);
 
-    // calculate distance
-    ::distance = measureDistanceOneStep(raw_gx, raw_gy, raw_gz, 1.7);
-    ::totalDist = ::totalDist + ::distance;
+    // calculate distance when we hit over 5% of the peak
+    if (abs(raw_gz) > peak * 0.05){
+      ::distance = measureDistanceOneStep(raw_gz, 1.7);
+      ::totalDist = ::totalDist + ::distance;
+    }
 
 
     // Display on LCD
@@ -123,22 +127,24 @@ int main() {
     if(!check_buttonpressed){
       continue;
     }else {
-        // sets the 10ms check timer for pushbutton
+      // sets the 10ms check timer for pushbutton
       tbutton.attach(button_check, 10ms);
       check_buttonpressed = false;
     }
   }
 }
 
-float measureDistanceOneStep(int16_t gyro_x, int16_t gyro_y, int16_t gyro_z, float heightOfUser){
+float measureDistanceOneStep(int16_t gyro_z, float heightOfUser){
   float legLength = 0.55 * heightOfUser;
   float result = 0.0;
   int16_t gyro_z_abs = abs(gyro_z);
-  if (gyro_z_abs > 4000){
-    // Transform to angle velocity. 
-    float degree = (0.00875 * (gyro_z_abs + 63));
-    result =  ((float) 0.05) * (degree / 360) * 2 * PI * legLength;
-  }
+  float degree = gyro_z_abs * 8.75 / 1000 / 360;
+  // calculate distance:
+  // 0.05 is the time interval between each sample
+  // degree / 360 is the ratio of the angle of one sample to a full circle
+  // 2 * legLength * sin(degree / 2) is the circumference of the circle
+  result = 2 * legLength * sin(degree / 2);
+  // result =  0.05 * (degree / 360) * 2 * PI * legLength;
   return result;
 }
 
