@@ -61,6 +61,17 @@ volatile float totalDist = 0.0;
 volatile float distance = 0.0;
 volatile int16_t peak = 0;
 
+void initializedata()
+{
+  sample_ready=false;
+  button_pressed = false;
+  check_buttonpressed = false;
+  ::totalDist = 0.0;
+  ::distance = 0.0;
+  peak = 0;
+}
+
+
 #define TABLE_SIZE  512
 typedef struct{
     volatile float velocity[TABLE_SIZE];
@@ -87,6 +98,7 @@ void spi_cb(int event){
 // and save the data when the 512 datapoints in table is full
 InterruptIn irq(BUTTON1);
 void save() {
+    initializedata();
     int err;
     // Try to mount the filesystem
     // printf("Mounting the filesystem... ");
