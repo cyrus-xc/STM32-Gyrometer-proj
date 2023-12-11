@@ -17,6 +17,12 @@
  * Changed the underlying memory block from flash to RAM
  * Added file system and USB accessibility
  */
+/* 12.11: 
+ * Add speed recording system
+ * The system record 20s of speed with 500ms eash
+ * The screen shows the most recent maximum speed within a certain time period defined by SPEED_WINDOW currently set to 1500ms
+ * Initialize data in the save() function 
+ */
 #include "mbed.h"
 #include "gyrometer.h"
 #include <LCD_DISCO_F429ZI.h>
@@ -61,17 +67,6 @@ volatile float totalDist = 0.0;
 volatile float distance = 0.0;
 volatile int16_t peak = 0;
 
-void initializedata()
-{
-  sample_ready=false;
-  button_pressed = false;
-  check_buttonpressed = false;
-  ::totalDist = 0.0;
-  ::distance = 0.0;
-  peak = 0;
-}
-
-
 #define TABLE_SIZE  512
 typedef struct{
     volatile float velocity[TABLE_SIZE];
@@ -86,6 +81,75 @@ void sample(){
 
 void spi_cb(int event){
   flags.set(SPI_FLAG);
+}
+
+//Speed variables
+#define SPEED_LENGTH 40 //speed table length recording SPEED_LENGTH*50ms period of speed data
+#define SPEED_WINDOW 3 //Using SPEED_WINDOW*500ms as speed showing window in the array
+float speed[SPEED_LENGTH];
+float current_speed;
+volatile uint16_t speed_counter=0;
+volatile float previous_distance=0.0;
+
+//Initialize speed table to all 0.0
+void speedinitialize()
+{
+  for(int i=0;i<SPEED_LENGTH;i++)
+  {
+    speed[i]=0.0;
+  }
+  ::previous_distance=0.0;
+  ::speed_counter=0;
+}
+
+//Update the speed table, recording the most recent speed in the end of the table
+void updatespeedtable()
+{
+  if(speed_counter>=500)
+  {
+    current_speed = (::totalDist-::previous_distance)/0.5;
+    ::previous_distance=::totalDist;
+    speed_counter=0;
+    for(int i=0;i<SPEED_LENGTH-1;i++)
+    {
+        speed[i]=speed[i+1];
+    }
+    speed[SPEED_LENGTH-1]=current_speed;
+    // move speed array to the left and add the new speed to the last element        
+  }
+  else
+  {
+    speed_counter+=50;
+  }
+}
+
+//return the maximum speed in the  window size period, 
+float getcurrentspeed()
+{
+  float tempspeed=0.0;
+  for(int i=SPEED_LENGTH-SPEED_WINDOW-1;i<SPEED_LENGTH;i++)
+  {
+    if(tempspeed<speed[i])
+      tempspeed=speed[i];
+  }
+  //ignore speed less than 0.05m/s
+  if(tempspeed<=0.05)
+  {
+    tempspeed=0.0;
+  }
+  return tempspeed;
+}
+
+//Initializing all data
+void initializedata()
+{
+  sample_ready=false;
+  button_pressed = false;
+  check_buttonpressed = false;
+  ::totalDist = 0.0;
+  ::distance = 0.0;
+  peak = 0;
+  speedinitialize();
 }
 
 // Push-button "pushed "ISR - TBD a little debouncing
@@ -148,6 +212,7 @@ void save() {
     }
 }
 static auto save_event = mbed_event_queue()->make_user_allocated_event(save);
+
 void table_init(TablePTR tableptr){
     tableptr->index = 0;
     for(int i = 0; i < TABLE_SIZE; i++){
@@ -162,11 +227,14 @@ void table_update(TablePTR tableptr, float vel, float totaldist){
     tableptr->index = (tableptr->index + 1) % TABLE_SIZE;
 }
 
+
+
 int main() {
   const uint8_t rawbuf_size = 32;
   int16_t XYZ_array[rawbuf_size * 3];
   uint16_t count = 0;
   table_init(&dist_table);
+  speedinitialize();
   // Initializations
 
   bd->init();
@@ -181,6 +249,8 @@ int main() {
   lcd.Clear(LCD_COLOR_BLACK);
   lcd.SetBackColor(LCD_COLOR_BLACK);
   lcd.SetTextColor(LCD_COLOR_BLUE);
+  lcd.DisplayStringAt(0, LINE(2), (uint8_t *)"Current Speed: ", CENTER_MODE);
+  lcd.DisplayStringAt(0, LINE(3), (uint8_t *)"0.0 m/s", CENTER_MODE);
   lcd.DisplayStringAt(0, LINE(4), (uint8_t *)"Total distance: ", CENTER_MODE);
   lcd.DisplayStringAt(0, LINE(5), (uint8_t *)"0.0 m", CENTER_MODE);
   
@@ -217,14 +287,21 @@ int main() {
       // if (::distance - 0.001 < 0){
       //   lcd.DisplayStringAt(0, LINE(6), (uint8_t *)"Idling", CENTER_MODE);
       // }
+
+      /*
+          Speed recording and showing
+      */
+      updatespeedtable();
+      //Always showing the max speed in the recent 1500ms
+      uint8_t message2[30];
+      sprintf((char *)message2, "%0.2f m/s", getcurrentspeed());
+      lcd.DisplayStringAt(0, LINE(3), (uint8_t *)&message2, CENTER_MODE);
+
       // Reset 50ms timer 
       sample_ready=false;
       t_out.attach(sample, 50ms);
     }
   }
-
-    
-
 }
 
 float measureDistanceOneStep(int16_t gyro_z, float heightOfUser){
