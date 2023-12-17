@@ -62,11 +62,11 @@ Zen = 1, Z axis enabled
 
 /* CTRL_REG4 configuration: 0'BLE'FS[1:0]'-'ST[1:0]'SIM
 BLE = 0, LSB @ lower address
-FS[1:0] = 0b01, 500 dps
+FS[1:0] = 0b00, 245 dps
 ST[1:0] = 0b00, nomal mode, self test disabled
 SIM = 0, 4 wire SPI interface 
 */
-#define GYRO_CTRL_REG4_CONFIG   0b0'0'01'0'00'0
+#define GYRO_CTRL_REG4_CONFIG   0b0'0'00'0'00'0
 
 typedef struct {
   SPI_HandleTypeDef *spi_handler;
