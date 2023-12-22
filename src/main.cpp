@@ -31,6 +31,9 @@
  * Slightly changed the initializedata() function 
  * Changed the setting in CTRL_REG4 to set full scale to 245 dps (to match all the comments)
  * Corrected the scale factor to represent radius/sec
+ * 
+ * 12.21
+ * Code clean up
  */
 #include "mbed.h"
 #include "gyrometer.h"
@@ -39,36 +42,46 @@
 #include <stdio.h>
 #include <errno.h>
 #include <functional>
+#include "HeapBlockDevice.h"
+#include "FATFileSystem.h"
+#include "USBMSD.h"
 
+
+#define TABLE_SIZE  500
 LCD_DISCO_F429ZI lcd;
 #define PI 3.141592
 // USB and FAT file system:
 // Using mbed HeapBLockDevice class type
 // Allocate RAM space for the file system to mount on
 // Total 64kB storage
-#include "HeapBlockDevice.h"
 #define DEFAULT_BLOCK_SIZE  512
-BlockDevice *bd = new HeapBlockDevice(128 * DEFAULT_BLOCK_SIZE, 1, 1, 512);
-// Using mbed FATFilesystem library and adapted sample code 
-// to define and handle file in the system
-#include "FATFileSystem.h"
-FATFileSystem fs("fs");
-// Maximum number of elements in buffer
 #define BUFFER_MAX_LEN 10
 #define FORCE_REFORMAT true
 // Define the USB Mass Storage Device using mbed library
 // Connecting through CN6 (USB Micro-AB)
-#include "USBMSD.h"
+#define SPEED_LENGTH 40 //speed table length recording SPEED_LENGTH*50ms period of speed data
+#define SPEED_WINDOW 3 //Using SPEED_WINDOW*500ms as speed showing window in the array
 
+//output table struct
+typedef struct{
+    volatile float out_velocity[TABLE_SIZE];
+    volatile float ins_velocity[TABLE_SIZE];
+    volatile float dist[TABLE_SIZE];
+    volatile uint16_t index;
+} Table, *TablePTR;
 // measure distance for one step given the data set and height of user (in meters)
 float measureDistanceOneStep(int16_t gyro_z, float heightOfUser);
 string float_to_String(float num);
-
+BlockDevice *bd = new HeapBlockDevice(128 * DEFAULT_BLOCK_SIZE, 1, 1, 512);
+// Using mbed FATFilesystem library and adapted sample code to define and handle file in the system
+FATFileSystem fs("fs");
+// Maximum number of elements in buffer
 EventFlags flags;
 Timeout t_sample;
 Timeout t_record;
 DigitalOut led1(LED1);
-
+Table dist_table;
+InterruptIn irq(BUTTON1);
 volatile bool sample_ready=false;
 volatile bool button_pressed = false;
 volatile bool check_buttonpressed = false;
@@ -77,31 +90,21 @@ volatile float distance = 0.0;
 volatile int16_t peak = 0;
 const int16_t peak_threshold = 4000;
 const float scale_factor = PI / 180 * (8.75 / 1000); // 1 digit reading to radius/sec, 245 dps Full Scale, 8.75 being the sensitive parameter listed in datasheet
-
-#define TABLE_SIZE  500
-typedef struct{
-    volatile float out_velocity[TABLE_SIZE];
-    volatile float ins_velocity[TABLE_SIZE];
-    volatile float dist[TABLE_SIZE];
-    volatile uint16_t index;
-} Table, *TablePTR;
-
-Table dist_table;
-void sample(){
-  sample_ready=true;
-}
-
-void spi_cb(int event){
-  flags.set(SPI_FLAG);
-}
-
 //Speed variables
-#define SPEED_LENGTH 40 //speed table length recording SPEED_LENGTH*50ms period of speed data
-#define SPEED_WINDOW 3 //Using SPEED_WINDOW*500ms as speed showing window in the array
 float speed[SPEED_LENGTH];
 float current_speed;
 volatile uint16_t speed_counter=0;
 volatile float previous_distance=0.0;
+
+//reset sample_ready flag
+void sample(){
+  sample_ready=true;
+}
+
+//spi callback function reset flag
+void spi_cb(int event){
+  flags.set(SPI_FLAG);
+}
 
 //Initialize speed table to all 0.0
 void speedinitialize()
@@ -114,7 +117,7 @@ void speedinitialize()
   ::speed_counter=0;
 }
 
-//Update the speed table, recording the most recent speed in the end of the table
+//Update the speed table, recording the most recent speed stores at the end of the table
 void updatespeedtable()
 {
   if(speed_counter>=500)
@@ -165,11 +168,8 @@ void initializedata()
 // Push-button "pushed "ISR
 // Every time user button is pressed, a new data.csv
 // file will be saved, (with the velocity and total distance) accessible through USB
-
-InterruptIn irq(BUTTON1);
 void save() {
     int err;
-
     err = fs.mount(bd);
     if (err || FORCE_REFORMAT) {
         err = fs.reformat(bd);
@@ -177,7 +177,6 @@ void save() {
             error("error: %s (%d)\n", strerror(-err), err);
         }
     }
-
     FILE *f = fopen("/fs/data.csv", "w+");
     err = fprintf(f, "Output speed, Instant speed, Distance\n");
     if (!f) {
@@ -201,20 +200,21 @@ void save() {
     if (err < 0) {
         error("error: %s (%d)\n", strerror(-err), err);
     }
-
     lcd.DisplayStringAt(0, LINE(7), (uint8_t *)"File Saved", CENTER_MODE);
     lcd.DisplayStringAt(0, LINE(8), (uint8_t *)"Push Blue Button", CENTER_MODE);
     lcd.DisplayStringAt(0, LINE(9), (uint8_t *)"To Record 25sec", CENTER_MODE);
 }
+
 static auto save_event = mbed_event_queue()->make_user_allocated_event(save);
 
+//Blue button callback function
 void button_cb(){
   initializedata();
   button_pressed = true;
   t_record.attach(std::ref(save_event),25.0);
 }
 
-
+// initizalize velocity table
 void table_init(TablePTR tableptr){
     tableptr->index = 0;
     for(int i = 0; i < TABLE_SIZE; i++){
@@ -224,6 +224,7 @@ void table_init(TablePTR tableptr){
     }
 }
 
+//update output velocity table
 void table_update(TablePTR tableptr, float out, float instant, float totaldist){
     tableptr->out_velocity[tableptr->index] = out;
     tableptr->ins_velocity[tableptr->index] = instant;
@@ -231,7 +232,28 @@ void table_update(TablePTR tableptr, float out, float instant, float totaldist){
     tableptr->index = (tableptr->index + 1) % TABLE_SIZE;
 }
 
+//measureing each step distance
+float measureDistanceOneStep(int16_t gyro_z, float heightOfUser){
+  float legLength = 0.55 * heightOfUser;
+  float result = 0.0;
+  int16_t gyro_z_abs = abs(gyro_z);
+  // float degree = gyro_z_abs * 8.75 / 1000 / 360;
+  float degree = gyro_z_abs * scale_factor * 0.05;
+  // calculate distance:
+  // 0.05 is the time interval between each sample
+  // degree / 360 is the ratio of the angle of one sample to a full circle
+  // 2 * legLength * sin(degree / 2) is the circumference of the circle
+  result = 2 * legLength * sin(degree / 2);
+  // result =  0.05 * (degree / 360) * 2 * PI * legLength;
+  return result;
+}
 
+//convert float to string 
+string float_to_String(float num){
+  // reserve 2 decimal places
+  string num_str = to_string(num);
+  return num_str.substr(0, num_str.find(".") + 3);
+}
 
 int main() {
   const uint8_t rawbuf_size = 32;
@@ -276,12 +298,6 @@ int main() {
       rawX_array[count] = raw_gx;
       rawY_array[count] = raw_gy;
       rawZ_array[count] = raw_gz;
-      // raw_gz = (raw_gz + rawZ_array[(count + rawbuf_size - 1) % rawbuf_size] + rawZ_array[(count + rawbuf_size - 2) % rawbuf_size])/3;
-
-      // Serial out put for debugging
-      // printf(">x_axis: %d|g\n", raw_gx);
-      // printf(">y_axis: %d|g\n", raw_gy);
-      // printf(">z_axis: %d|g\n", raw_gz);
 
       // calculate distance when we hit over 5% of the peak
       if (abs(raw_gz) > peak * 0.05){
@@ -293,14 +309,10 @@ int main() {
       uint8_t message1[30];
       sprintf((char *)message1, "%6.2f m", ::totalDist);
       lcd.DisplayStringAt(0, LINE(5), (uint8_t *)&message1, CENTER_MODE);
-      // if (::distance - 0.001 < 0){
-      //   lcd.DisplayStringAt(0, LINE(6), (uint8_t *)"Idling", CENTER_MODE);
-      // }
 
-      /*
-          Speed recording and showing
-      */
+      //Speed recording and showing
       updatespeedtable();
+
       //Always showing the max speed in the recent 1500ms
       float output_speed = getcurrentspeed();
       uint8_t message2[30];
@@ -308,6 +320,7 @@ int main() {
       lcd.DisplayStringAt(0, LINE(3), (uint8_t *)&message2, CENTER_MODE);
       table_update(&dist_table, output_speed, current_speed, ::totalDist);
 
+      //blue button record saving and reset function
       if (button_pressed){
         lcd.ClearStringLine(7);
         lcd.DisplayStringAt(0, LINE(8), (uint8_t *)"Recording...... ", CENTER_MODE);
@@ -320,25 +333,4 @@ int main() {
       t_sample.attach(sample, 50ms);
     }
   }
-}
-
-float measureDistanceOneStep(int16_t gyro_z, float heightOfUser){
-  float legLength = 0.55 * heightOfUser;
-  float result = 0.0;
-  int16_t gyro_z_abs = abs(gyro_z);
-  // float degree = gyro_z_abs * 8.75 / 1000 / 360;
-  float degree = gyro_z_abs * scale_factor * 0.05;
-  // calculate distance:
-  // 0.05 is the time interval between each sample
-  // degree / 360 is the ratio of the angle of one sample to a full circle
-  // 2 * legLength * sin(degree / 2) is the circumference of the circle
-  result = 2 * legLength * sin(degree / 2);
-  // result =  0.05 * (degree / 360) * 2 * PI * legLength;
-  return result;
-}
-
-string float_to_String(float num){
-  // reserve 2 decimal places
-  string num_str = to_string(num);
-  return num_str.substr(0, num_str.find(".") + 3);
 }
