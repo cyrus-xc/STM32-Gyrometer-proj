@@ -2,7 +2,7 @@
 
 NYU ECE-6483 Embeded System Challenge
 
-Group member: Chen XU(cx2214), Shuning LI(sl10916),
+Group member: Chen XU(cx2214), Shuning LI(sl10916), Sichen PAN (sp6966)
 
 ### Gyro Data Collection
 
@@ -61,5 +61,23 @@ We record the peak angular speed in every run, and use 5% of that peak as our th
 We developed a nice-to-have LCD display to show how many distance traveled. It is developed on [BSP_DISCO_F429ZI](https://os.mbed.com/users/SomeRandomBloke/code/BSP_DISCO_F429ZI/), contributed by [Andrew Lindsay](https://os.mbed.com/users/SomeRandomBloke/).
 
 <img src="./resource/lcd.jpg" alt="lcd" style="zoom:10%;" />
+
+##### Saved data and exporting through USB
+
+In addition to being able to see the speed and distance on the LCD screen, the user can also start saving a piece of 25-second data by pushing the blue button on the board (LCD would display a two line instruction to inform the user about this). Once the button is pressed, previous speed and distance would be reset and timer would start running. When the timer is up, a csv file would be saved to a FAT file system built on the RAM. To achieve this, we utilized mbed's HeapBlockDevice https://os.mbed.com/docs/mbed-os/v5.15/apis/heapblockdevice.html and FATFileSystem https://os.mbed.com/docs/mbed-os/v5.15/apis/fatfilesystem.html API, and allocated a 64kB memory space for the FileSystem - the MCU has 256kB RAM and the code used less than 30kB after compiling so we have enough space. We have also taken into consideration that it would be very inconvenient to carry a laptop around for data exporting, therefore we used mbed's USBMSD https://os.mbed.com/docs/mbed-os/v6.16/apis/usbmsd.html API, and configured the target so that we could use the board as a mass-storage disk through the USB micro-AB connector. 
+
+The user can first fasten the board (powered by a battery bank through the USB mini connector) to right above the knee, and then push the button to start a recording. The LCD display will change to "Recording......" to indicate the data is being recorded, and when 25 second is up, LCD would display "File Saved" to let the user know that data is ready to be exported. 
+
+LCD display when blue button pushed. 
+<img src="./resource/lcd_record.jpg" alt="lcd_record" style="zoom:10%;" />
+
+LCD when 25 second timer is up. 
+<img src="./resource/lcd_saved.jpg" alt="lcd_saved" style="zoom:10%;" />
+
+The board can be unfastened and with the battery bank still connected through the mini-USB cable, it can be connected to a PC through the micro-AB connector. It would be recoginized as a new removable disk (USB Drive E:).
+<img src="./resource/usbmsd1.png" alt="usbmsd1" style="zoom:20%;" />
+
+Click on the removable disk and there will be a file named data.csv.
+<img src="./resource/usbmsd2.png" alt="usbmsd2" style="zoom:20%;" />
 
 <u>%% TO-DO: 或许能提出更多的创意点？</u>
