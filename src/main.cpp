@@ -26,7 +26,6 @@
 #include <functional>
 
 LCD_DISCO_F429ZI lcd;
-#define PI 3.141592
 // USB and FAT file system:
 // Using mbed HeapBLockDevice class type
 // Allocate RAM space for the file system to mount on
@@ -158,11 +157,11 @@ int main() {
   // Initializations
 
   bd->init();
-  GYRO_init(); // threshold of 250dps is set on xyz axis
+  GYRO_init();
   // Setup the save event on button press, use the event queue
   // to avoid running in interrupt context
   irq.fall(std::ref(save_event));
-  // Initialized USB
+  // Initialize USB
   USBMSD usb(bd);
   t_out.attach(sample, 50ms);
   BSP_LCD_SetFont(&Font20);
@@ -182,9 +181,10 @@ int main() {
       raw_gy = GYRO_Y();
       raw_gz = GYRO_Z();
       peak = peak > abs(raw_gz)? peak : abs(raw_gz);
-      XYZ_array[count] = raw_gx;
-      XYZ_array[count + rawbuf_size] = raw_gy;
-      XYZ_array[count + rawbuf_size * 2] = raw_gz;
+      // unused 
+      // XYZ_array[count] = raw_gx;
+      // XYZ_array[count + rawbuf_size] = raw_gy;
+      // XYZ_array[count + rawbuf_size * 2] = raw_gz;
 
       // Serial out put for debugging
       // printf(">x_axis: %d|g\n", raw_gx);
@@ -202,16 +202,12 @@ int main() {
       uint8_t message1[30];
       sprintf((char *)message1, "%0.2f m", ::totalDist);
       lcd.DisplayStringAt(0, LINE(5), (uint8_t *)&message1, CENTER_MODE);
-      // if (::distance - 0.001 < 0){
-      //   lcd.DisplayStringAt(0, LINE(6), (uint8_t *)"Idling", CENTER_MODE);
-      // }
+
       // Reset 50ms timer 
       sample_ready=false;
       t_out.attach(sample, 50ms);
     }
-  }
-
-    
+  }    
 
 }
 
@@ -220,12 +216,8 @@ float measureDistanceOneStep(int16_t gyro_z, float heightOfUser){
   float result = 0.0;
   int16_t gyro_z_abs = abs(gyro_z);
   float degree = gyro_z_abs * 8.75 / 1000 / 360;
-  // calculate distance:
-  // 0.05 is the time interval between each sample
-  // degree / 360 is the ratio of the angle of one sample to a full circle
-  // 2 * legLength * sin(degree / 2) is the circumference of the circle
+  // calculate distance with circumference of the circle
   result = 2 * legLength * sin(degree / 2);
-  // result =  0.05 * (degree / 360) * 2 * PI * legLength;
   return result;
 }
 
