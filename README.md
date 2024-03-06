@@ -1,11 +1,5 @@
 # STM32-Gyrometer-proj
 
-NYU ECE-6483 Embeded System Challenge
-
-Group member: Chen XU(cx2214), Shuning LI(sl10916), Sichen PAN (sp6966)
-
-## Introduction
-
 This project aimed to develop a wareable device to measure distance and speed of walking with board STM32F429I with Gyroscope I3G4250D. With the angular velocity data, an algorithm to calculate the distance traveled is developed with the analysis of leg placement while walking. In consideration of real-life use cases, an user-friendly design is developed, users can press a single button to start/stop the measurement. In addition, the LCD screen is utilized to show live data, including current speed and total distance. Data log during a measurement is saved to CSV file and could be exported via USB connection. 
 
 A demo video can be found on [YouTube](https://youtu.be//f3MMmMKtFfY).
